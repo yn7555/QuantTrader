@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import request from '@/common/utils/request'
-import type { ApiResponse } from '@/common/types/api'
 import type {
   StockOption,
   StrategyOption,
@@ -127,7 +126,8 @@ export const useReplayRuntime = create<ReplayRuntimeState>((set, get) => ({
     const config = useReplayConfig.getState()
     set({ loading: true })
     try {
-      const res = await request.post<unknown, ApiResponse<ReplaySession>>('/replay/start', {
+      // 拦截器已解包，request.post 直接返回业务数据
+      const session = await request.post<ReplaySession>('/replay/start', {
         stock_code: config.stockCode,
         strategy_id: config.strategyId,
         account_id: config.accountId,
@@ -135,8 +135,7 @@ export const useReplayRuntime = create<ReplayRuntimeState>((set, get) => ({
         start_date: config.startDate,
         end_date: config.endDate,
       })
-      if (res.success && res.data) {
-        const session = res.data
+      if (session) {
         set({
           sessionId: session.session_id,
           status: session.status,
@@ -159,12 +158,12 @@ export const useReplayRuntime = create<ReplayRuntimeState>((set, get) => ({
     const { sessionId } = get()
     if (!sessionId) return
     try {
-      const res = await request.post<unknown, ApiResponse<ReplaySession>>('/replay/control', {
+      const data = await request.post<ReplaySession>('/replay/control', {
         session_id: sessionId,
         action,
       })
-      if (res.success && res.data) {
-        const newStatus = res.data.status
+      if (data) {
+        const newStatus = data.status
         set({ status: newStatus })
         // 如果停止后变为完成状态，拉取报告数据
         if (newStatus === 'completed') {
@@ -192,19 +191,19 @@ export const useReplayRuntime = create<ReplayRuntimeState>((set, get) => ({
 
   fetchSessionData: async (sessionId) => {
     try {
-      const [klineRes, signalsRes, tradesRes, metricsRes, equityRes] = await Promise.all([
-        request.get<unknown, ApiResponse<KlineBar[]>>(`/replay/kline/${sessionId}`),
-        request.get<unknown, ApiResponse<TradeSignal[]>>(`/replay/signals/${sessionId}`),
-        request.get<unknown, ApiResponse<TradeRecord[]>>(`/replay/trades/${sessionId}`),
-        request.get<unknown, ApiResponse<ReplayMetrics>>(`/replay/metrics/${sessionId}`),
-        request.get<unknown, ApiResponse<EquityPoint[]>>(`/replay/equity/${sessionId}`),
+      const [klineData, signalsData, tradesData, metricsData, equityData] = await Promise.all([
+        request.get<KlineBar[]>(`/replay/kline/${sessionId}`),
+        request.get<TradeSignal[]>(`/replay/signals/${sessionId}`),
+        request.get<TradeRecord[]>(`/replay/trades/${sessionId}`),
+        request.get<ReplayMetrics>(`/replay/metrics/${sessionId}`),
+        request.get<EquityPoint[]>(`/replay/equity/${sessionId}`),
       ])
       set({
-        klineData: klineRes.success ? (klineRes.data ?? []) : [],
-        signals: signalsRes.success ? (signalsRes.data ?? []) : [],
-        trades: tradesRes.success ? (tradesRes.data ?? []) : [],
-        metrics: metricsRes.success ? metricsRes.data : null,
-        equityCurve: equityRes.success ? (equityRes.data ?? []) : [],
+        klineData: Array.isArray(klineData) ? klineData : [],
+        signals: Array.isArray(signalsData) ? signalsData : [],
+        trades: Array.isArray(tradesData) ? tradesData : [],
+        metrics: metricsData ?? null,
+        equityCurve: Array.isArray(equityData) ? equityData : [],
       })
     } catch {
       // 数据拉取失败不改变状态
@@ -213,19 +212,19 @@ export const useReplayRuntime = create<ReplayRuntimeState>((set, get) => ({
 
   fetchReportData: async (sessionId) => {
     try {
-      const [benchmarkRes, returnRes, pnlRes, positionRes, logsRes] = await Promise.all([
-        request.get<unknown, ApiResponse<BenchmarkPoint[]>>(`/replay/benchmark/${sessionId}`),
-        request.get<unknown, ApiResponse<StrategyReturnPoint[]>>(`/replay/strategy-return/${sessionId}`),
-        request.get<unknown, ApiResponse<DailyPnlPoint[]>>(`/replay/daily-pnl/${sessionId}`),
-        request.get<unknown, ApiResponse<DailyPositionPoint[]>>(`/replay/daily-positions/${sessionId}`),
-        request.get<unknown, ApiResponse<ReplayLogEntry[]>>(`/replay/logs/${sessionId}`),
+      const [benchmarkData, returnData, pnlData, positionData, logsData] = await Promise.all([
+        request.get<BenchmarkPoint[]>(`/replay/benchmark/${sessionId}`),
+        request.get<StrategyReturnPoint[]>(`/replay/strategy-return/${sessionId}`),
+        request.get<DailyPnlPoint[]>(`/replay/daily-pnl/${sessionId}`),
+        request.get<DailyPositionPoint[]>(`/replay/daily-positions/${sessionId}`),
+        request.get<ReplayLogEntry[]>(`/replay/logs/${sessionId}`),
       ])
       set({
-        benchmarkData: benchmarkRes.success ? (benchmarkRes.data ?? []) : [],
-        strategyReturnData: returnRes.success ? (returnRes.data ?? []) : [],
-        dailyPnlData: pnlRes.success ? (pnlRes.data ?? []) : [],
-        dailyPositionData: positionRes.success ? (positionRes.data ?? []) : [],
-        logEntries: logsRes.success ? (logsRes.data ?? []) : [],
+        benchmarkData: Array.isArray(benchmarkData) ? benchmarkData : [],
+        strategyReturnData: Array.isArray(returnData) ? returnData : [],
+        dailyPnlData: Array.isArray(pnlData) ? pnlData : [],
+        dailyPositionData: Array.isArray(positionData) ? positionData : [],
+        logEntries: Array.isArray(logsData) ? logsData : [],
       })
     } catch {
       // 数据拉取失败不改变状态
@@ -255,15 +254,16 @@ export const useReplayOptions = create<ReplayOptionsState>((set) => ({
 
   fetchStrategies: async () => {
     try {
-      const res = await request.get<unknown, ApiResponse<StrategyOption[]>>('/replay/strategies')
-      if (res.success) set({ strategies: res.data ?? [] })
+      // 拦截器已解包，request.get 直接返回业务数据数组
+      const data = await request.get<StrategyOption[]>('/replay/strategies')
+      set({ strategies: Array.isArray(data) ? data : [] })
     } catch { /* noop */ }
   },
 
   fetchAccounts: async () => {
     try {
-      const res = await request.get<unknown, ApiResponse<VirtualAccountOption[]>>('/replay/virtual-accounts')
-      if (res.success) set({ accounts: res.data ?? [] })
+      const data = await request.get<VirtualAccountOption[]>('/replay/virtual-accounts')
+      set({ accounts: Array.isArray(data) ? data : [] })
     } catch { /* noop */ }
   },
 
@@ -273,11 +273,11 @@ export const useReplayOptions = create<ReplayOptionsState>((set) => ({
       return
     }
     try {
-      const res = await request.post<unknown, ApiResponse<StockOption[]>>('/replay/stocks/search', {
+      const data = await request.post<StockOption[]>('/replay/stocks/search', {
         keyword,
         limit: 10,
       })
-      if (res.success) set({ stocks: res.data ?? [] })
+      set({ stocks: Array.isArray(data) ? data : [] })
     } catch { /* noop */ }
   },
 }))
