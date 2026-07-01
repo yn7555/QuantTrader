@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 历史回放模块 - 路由定义
 
@@ -19,7 +21,6 @@
 """
 
 from fastapi import APIRouter
-from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
